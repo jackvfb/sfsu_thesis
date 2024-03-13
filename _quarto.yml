@@ -1,0 +1,42 @@
+project:
+  type: book
+
+book:
+  title: Classification of Narrowband High-frequency Echolocation Clicks in the California Current
+  author:
+    - name: Jackson Vanfleet-Brown
+      affiliation:
+        - id: sfsu
+          name: San Francisco State University
+          department: Estuary and Ocean Science Center
+          city: Tiburon
+          state: California
+      email: jvanfleet-brown@sfsu.edu
+      corresponding: true
+    - name: Anne E. Simonis
+      affiliation:
+        - ref: sfsu
+    - name: Frederick I. Archer
+      affiliation:
+        - name: National Oceanic and Atmospheric Administration
+          department: Southwest Fisheries Science Center
+    - name: Ellen Hines
+      affiliation:
+        - ref: sfsu
+  date: "3/8/2024"
+  chapters:
+    - index.qmd
+    - figs-tables.qmd
+  downloads: docx
+
+bibliography: references.bib
+
+format:
+  html:
+    theme: cosmo
+    echo: false
+  docx:
+    echo: false
+    reference-doc: sfsu-reference.docx
+  pdf:
+    documentclass: scrreport

@@ -1,0 +1,140 @@
+---
+title: "Figures and Tables"
+execute: 
+  cache: true
+  warning: false
+  error: false
+  echo: false
+
+---
+
+```{r}
+library(identidrift)
+library(tidyverse)
+library(PAMpal)
+library(banter)
+library(rfPermute)
+library(knitr)
+library(densityClust)
+
+source("manuscript.R")
+```
+
+# Tables
+
+## @tbl-ndets
+
+```{r}
+#| label: tbl-ndets
+#| tbl-cap: "Size of each class, represented by number of distinct detections and number of events in which the detections occurred, for each species class in the training set."
+
+matrix(data = c(sapply(train, nDetections, distinct=TRUE),
+                sapply(train, \(x) length(events(x)))),
+       nrow=3,
+       ncol=2,
+       dimnames = list(c("*Kogia*", "Dall's porpoise",
+                         "harbor porpoise"),
+                       c("detections","events"))) %>%
+  kable()
+```
+
+## @tbl-class-stats
+
+```{r}
+#| label: tbl-class-stats
+#| tbl-cap: "Summary statistics of acoustic features for each species class. Mean (sd) is given in the top row of each cell, and median (min - max) is given in the bottom row of each cell."
+#| warning: false
+#| error: false
+#| message: false
+
+varsWanted <- c("BW_3dB", "BW_10dB", "centerkHz_3dB", "centerkHz_10dB", "duration",
+                "fmax_10dB", "fmax_3dB", "fmin_3dB", "fmin_10dB", "peak", "Q_3dB",   
+                 "Q_10dB", "peakTime")
+
+train.ec %>%
+  select(species, all_of(varsWanted)) %>%
+  pivot_longer(cols=-species, names_to = "var") %>%
+  group_by(species, var) %>%
+  summarize(mean=mean(value), sd=sd(value), median=median(value),
+            min=min(value), max=max(value)) %>%
+  mutate_if(is.numeric, round, 2) %>%
+  mutate(row1=str_c(mean, " (", sd, ")")) %>%
+  mutate(row2=str_c(median, " (", min, " - ", max, ")")) %>% 
+  mutate(entry=str_c(row1, row2, sep="<br>")) %>%
+  select(species, var, entry) %>%
+  pivot_wider(names_from = var, values_from = entry) %>%
+  mutate(species = case_match(species, "ks" ~ "*Kogia* spp.",
+                              "pd" ~ "Dall's porpoise",
+                              "pp"~ "harbor porpoise")) %>% 
+  column_to_rownames("species") %>%
+  t() %>%
+  kable(align="c")
+```
+
+## @tbl-clust-assn
+
+```{r}
+#| label: tbl-clust-assn
+#| tbl-cap: "Table of cluster assignments"
+
+train.clust.table %>% kable()
+```
+
+# Figures
+
+## @fig-data-loss
+
+```{r}
+#| label: fig-data-loss
+#| fig-cap: "Trend lines showing the change in the size of the acoustic data in the training set before and after defining events. The trend line is colored according to the species class. The y-axis is plotted on a logarithmic scale."
+
+db <- templ.match %>%
+  group_by(species) %>%
+  count() %>%
+  mutate(t = 1)
+ev <- list_rbind(lapply(train, \(x) data.frame(n = nDetections(x, distinct=TRUE),
+                                               species = id(x),
+                                               t = 2)))
+
+rbind(db, ev) %>%
+  ggplot()+
+  geom_line(aes(x=t, y=n, color=species))+
+  scale_y_log10()+
+  scale_x_continuous(breaks=c(1,2), labels=c("before defining events", "after defining events"), expand = c(0.1,0.1))+
+  labs(x="State of database", y="Clicks in database")
+
+```
+
+## @fig-avgspec
+
+::: {#fig-avgspec layout-nrow=3}
+
+```{r #fig-avgspec-ks}
+#| fig-cap: "*Kogia* spp."
+#| cache: true
+classPlot("ks")
+```
+
+```{r #fig-avgspec-pd}
+#| fig-cap: "Dall's porpoise"
+#| cache: true
+classPlot("pd")
+```
+
+```{r #fig-avgspec-pp}
+#| fig-cap: "Harbor porpoise"
+#| cache: true
+classPlot("pp")
+```
+
+Averaged spectra and concatenated spectrograms for all species classes in the training set.
+:::
+
+## @fig-density-clust
+
+```{r}
+#| label: fig-density-clust
+#| fig-cap: "Density clusters with three clusters formed with \u03c1=10 and \u03B4=2.5"
+
+plotDensityClust(train.clust)
+```

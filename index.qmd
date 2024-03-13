@@ -1,0 +1,55 @@
+```{r}
+#| output: false
+#| 
+library(identidrift)
+library(tidyverse)
+```
+
+# Results
+
+## Data collection, click detection, and event definition
+
+After *PAMguard* processing, the recordings in the training set yielded a total of `{r} nrow(templ.match)` distinct detections. After undergoing the event definition process, the training set was reduced to `{r} length(unique(train.ec$UID))` distinct NBHF detections distributed across `{r} length(unique(train.ec$eventId))` events (@tbl-ndets). Representation of each class in the final training set differed, apparently as a result not only of the initial size of the database but also as a result of differing rates of data loss during event definition (@fig-data-loss).
+
+```{r}
+#| output: false
+
+varsWanted <- c("BW_3dB", "BW_10dB", "centerkHz_3dB", "centerkHz_10dB", "duration",
+                "fmax_10dB", "fmax_3dB", "fmin_3dB", "fmin_10dB", "peak", "Q_3dB",   
+                 "Q_10dB", "peakTime")
+
+stats <- train.ec %>%
+   select(species, all_of(varsWanted)) %>%
+   pivot_longer(cols=-species, names_to = "var") %>%
+   group_by(species, var) %>%
+   summarize(mean=mean(value), sd=sd(value), median=median(value),
+             min=min(value), max=max(value)) %>%
+   mutate_if(is.numeric, round, 2) %>%
+   nest(data=-var) %>%
+   mutate(data=map(data, \(x) as.matrix(column_to_rownames(x, var="species")))) %>%
+   pull(data, name = "var")
+
+mean_sd <- function(m, sp) {
+  paste0(m[sp, "mean"], " (", m[sp, "sd"], ")")
+}
+```
+## Features
+
+Summary statistics for each class’s acoustic feature distributions are given in @tbl-class-stats. These summaries suggested differences among classes that were also visualized by comparing the average spectra and concatenated spectrograms given in @fig-avgspec. Altogether, these comparisons suggested that *Kogia*, Dall’s, and harbor porpoise emit click energy focused at respectively increasing frequencies. Peak frequency was one such feature to indicate this relationship, as *Kogia*, Dall's porpoise, and harbor porpoise produced mean (sd) values of `{r} mean_sd(stats$peak, "ks")`, `{r} mean_sd(stats$peak, "pd")`, `{r} mean_sd(stats$peak, "pp")`, respectively. The same relationship was apparent by comparing the features of center, maximum, and minimum frequencies at both -3 dB and -10 dB (@tbl-class-stats). As shown visually in @fig-avgspec, this shift is evident by comparing the frequency values associated with the peaks in the average spectra as well as the darkened bands in the concatenated spectrograms.
+
+These visualizations also reveal other characteristics, geometric characteristics that appeared to be unique among the three classes. As compared to Kogia which has mean (sd) bandwidth of `{r} mean_sd(stats$BW_3dB, "ks")` at -3 dB, Both Dall’s and harbor have lesser bandwidth at -3 dB which is `{r} mean_sd(stats$BW_3dB, "pd")` and `{r} mean_sd(stats$BW_3dB, "pp")`, respectively. Both harbor and Dall’s also exhibited apparent shoulders or notches in their spectra at lower frequencies than peak frequency, which was also distinguished them from the more smoothed and unimodal profile of the average spectrum of *Kogia*.
+
+## Clustering
+
+Using all available features to calculate the Euclidean distances between clicks, unsupervised clustering revealed the formation of three clusters (@fig-density-clust), each of which was dominated by clicks from a distinct species class, as shown (@tbl-clust-assn). The three-cluster solution was favored because it captured cluster centers with high values of $\rho$ and $\delta$ and their product, $\gamma$ (@fig-density-clust, upper two panels).
+
+## Modelling
+
+The BANTER model correctly classified 91% of all events (Table). As shown in the 
+Table, harbor had the lowest classification accuracy, 87%, next Kogia 93%, and best dall’s with 100% correct. Classification accuracy in all three classes was greater than what was expected due to chance (Given as priors in Table column R). Events in each class were discriminated using a consistent set predictors as demonstrated by non-overlapping regions occupied by each cluster in the proximity plot in Fig a (see for more information). Each cluster’s core is formed by a relatively compressed grouping of events within each class, with only one outlying harbor porpoise event that falls within dall’s porpoise. The model reliably classified these core events correctly, as indicated by the color of the circular halo around each point matching its center point. For events not closely associated with the core grouping, of which there were few, model misclassification was prevalent.
+
+The top ten predictors were given, ranked by their overall importance, in the heatmap in Figure b. The top three showed consistency across all classes which reflecting the separation among clusters in the proximity plot. The top three predictors are the proportion of midrange clicks classified as dall’s, the proportion of midrange clicks classified as harbor porpoise, and the proportion of low range clicks classified as *Kogia*.
+
+## Predictions
+
+Predictions for the survey data revealed
