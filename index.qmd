@@ -1,22 +1,70 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
 ```{r}
 #| output: false
-#| 
+
+
 library(identidrift)
 library(tidyverse)
+library(PAMpal)
+library(banter)
+library(rfPermute)
+library(knitr)
+library(densityClust)
 ```
 
-# Results
+# Results {.unnumbered}
 
-## Data collection, click detection, and event definition
+### Click detection and event definition
 
-After *PAMguard* processing, the recordings in the training set yielded a total of `{r} nrow(templ.match)` distinct detections. After undergoing the event definition process, the training set was reduced to `{r} length(unique(train.ec$UID))` distinct NBHF detections distributed across `{r} length(unique(train.ec$eventId))` events (@tbl-ndets). Representation of each class in the final training set differed, apparently as a result not only of the initial size of the database but also as a result of differing rates of data loss during event definition (@fig-data-loss).
+From an initial set of 26,357 distinct detections, the recordings in the training set yielded 78 events containing a total of 3,994 distinct detections (@tbl-ndets). Harbor porpoise contributed the most events and detections to the training set, outnumbering both *Kogia* spp. and Dall’s porpoise which were roughly equal. A differing proportion of data was dropped in each class and was highest for Dall’s porpoise (99%). 
+
+```{r}
+#| label: tbl-ndets
+#| tbl-cap: "Representation of each class in the training set: $n_i$ initial quantity of distinct detections, prior to event definition; $n_f$ final quantity of detections, i.e. detections included in events; $n$ events number of distinct events."
+
+data(templ.match)
+templ.match <- ungroup(templ.match)
+
+t <- templ.match %>%
+  left_join(select(train.ec, UID, eventId), by = "UID")
+
+t_tot <- t %>% 
+  summarize(n_initial = sum(is.na(eventId)),
+            n_final = sum(!is.na(eventId)),
+            n_ev = n_distinct(eventId, na.rm = TRUE)) %>%
+  mutate(species = "Total")
+
+t_sp <- t %>%
+  group_by(species) %>% 
+  summarize(n_initial = sum(is.na(eventId)),
+            n_final = sum(!is.na(eventId)),
+            n_ev = n_distinct(eventId, na.rm = TRUE))
+
+rbind(t_tot, t_sp) %>% 
+  arrange(n_final) %>%
+  select(species, n_initial, n_final, n_ev) %>% 
+  rename("$n_i$ detections" = n_initial,
+         "$n_f$ detections" = n_final,
+         "$n$ events" = n_ev) %>%
+  mutate(species = case_match(species,"ks" ~ "*Kogia* spp.",
+                              "pd" ~ "Dall's porpoise",
+                              "pp" ~ "harbor porpoise",
+                              .default = species)) %>% 
+  kable()
+```
+
+### Features
 
 ```{r}
 #| output: false
 
 varsWanted <- c("BW_3dB", "BW_10dB", "centerkHz_3dB", "centerkHz_10dB", "duration",
                 "fmax_10dB", "fmax_3dB", "fmin_3dB", "fmin_10dB", "peak", "Q_3dB",   
-                 "Q_10dB", "peakTime")
+                 "Q_10dB")
 
 stats <- train.ec %>%
    select(species, all_of(varsWanted)) %>%
@@ -33,9 +81,100 @@ mean_sd <- function(m, sp) {
   paste0(m[sp, "mean"], " (", m[sp, "sd"], ")")
 }
 ```
-## Features
 
-Summary statistics for each class’s acoustic feature distributions are given in @tbl-class-stats. These summaries suggested differences among classes that were also visualized by comparing the average spectra and concatenated spectrograms given in @fig-avgspec. Altogether, these comparisons suggested that *Kogia*, Dall’s, and harbor porpoise emit click energy focused at respectively increasing frequencies. Peak frequency was one such feature to indicate this relationship, as *Kogia*, Dall's porpoise, and harbor porpoise produced mean (sd) values of `{r} mean_sd(stats$peak, "ks")`, `{r} mean_sd(stats$peak, "pd")`, `{r} mean_sd(stats$peak, "pp")`, respectively. The same relationship was apparent by comparing the features of center, maximum, and minimum frequencies at both -3 dB and -10 dB (@tbl-class-stats). As shown visually in @fig-avgspec, this shift is evident by comparing the frequency values associated with the peaks in the average spectra as well as the darkened bands in the concatenated spectrograms.
+Summary statistics for click features extracted by *PAMpal* are given in @tbl-sumstats. From least to greatest, *Kogia* spp., Dall's porpoises, and harbor porpoises produced click peak frequencies of `{r} mean_sd(stats$peak, "ks")`, `{r} mean_sd(stats$peak, "pd")`, `{r} mean_sd(stats$peak, "pp")`, respectively. This ranking was preserved with respect to the related features center, maximum, and minimum frequencies at both -3 dB and -10 dB. With respect to bandwidths, *Kogia* spp. produced the greatest mean values at both -3 dB and -10 dB.
+
+```{r}
+#| label: tbl-sumstats
+#| tbl-cap: "Summary statistics of acoustic features for each species class, given as mean \u00b1 standard deviation. The abbreviated name for the feature is given underneath in parenthesis, where needed."
+#| warnings: false
+
+train.ec %>%
+  select(species, all_of(varsWanted)) %>%
+  pivot_longer(cols=-species, names_to = "var") %>%
+  group_by(species, var) %>%
+  summarize(mean=mean(value), sd=sd(value)) %>% 
+  mutate_if(is.numeric, round, 2) %>%
+  mutate(entry=str_c(mean, "<br>\u00b1 ", sd)) %>%
+  select(species, var, entry) %>%
+  mutate(species = case_match(species,
+                              "ks" ~ "*Kogia* spp.",
+                              "pd" ~ "Dall's porpoise",
+                              "pp"~ "harbor porpoise"),
+         var = case_match(var,
+                          "BW_10dB" ~ "Bandwidth -10 dB",
+                          "BW_3dB" ~ "Bandwidth -3 dB",
+                          "Q_10dB" ~ "Q factor -10 dB",
+                          "Q_3dB" ~ "Q factor -3 dB",
+                          "centerkHz_10dB" ~ "Center freq -10 dB<br> ($f_{center}^{-10dB}$)",
+                          "centerkHz_3dB" ~ "Center freq -3 dB<br> ($f_{center}^{-3dB}$)",
+                          "fmax_10dB" ~ "Max freq -10 dB<br> ($f_{max}^{-10dB}$)",
+                          "fmax_3dB" ~ "Max freq -3 dB<br> ($f_{max}^{-3dB}$)",
+                          "fmin_10dB" ~ "Min freq -10 dB<br> ($f_{min}^{-10dB}$)",
+                          "fmin_3dB" ~ "Min freq -3 dB<br> ($f_{min}^{-3dB}$)",
+                          "duration" ~ "Duration",
+                          "peak" ~ "Peak freq<br> ($f_{peak}$)")) %>%
+  pivot_wider(names_from = var, values_from = entry) %>%
+  column_to_rownames("species") %>%
+  t() %>%
+  kable(align="c")
+```
+
+Sorted by peak frequency, the concatenated spectrograms in @fig-concatspec exhibited lateral darkening in bands, showing that the region of highest energy was well defined in the majority of the clicks comprising each class in the training set. With clicks sorted by peak frequency, as shown, slight incline was introduced to the lateral band indicating that there were fluctuations in peaks. 
+
+The averaged spectra for each species displayed distinct geometry. *Kogia* spp. (@fig-concatspec, B) was descriptively more symmetrical and smoothed. Dall’s porpoise (@fig-concatspec, D) and harbor porpoise (@fig-concatspec, F) had notches and shoulders at frequencies below peak. The frequency values as which the peaks and notches occurred, as well as the bandwidth of the spectra at different levels of intensity, clearly differed between each class.
+
+!["Concatenated spectrograms (Left side) and averaged spectra (Right side) for each of the three classes in the training set: *Kogia* spp. (A, B), Dall's porpoise (C, D), and harbor porpoise (E, F)."](fig_img/concatspec.png){#fig-concatspec}
+
+### Click classification
+
+####	Supervised
+
+Using the complete set of features as predictors, a random forest trained with species as it’s response variable ($n_{tree} = 500, n_{sampsize} = 35$) had 88.4% accuracy. The three important predictors were $f_{max}^{-10dB}$, $f_{center}^{-10dB}$, and $f_{min}^{-10dB}$.
+
+#### Unsupervised
+
+Density clustering formed three clusters when setting $\rho$ = 25 and $\delta$ = 2 (@fig-clusters). The distribution of each class within each the three click clusters revealed that each class was distributed in varying proportions across each cluster (@tbl-clust-assn). Using these clusters as the response variable in a random forest click classifier ($n_{tree} = 500, n_{sampsize} = 35$) resulted in classification accuracy of 98.5% correct, with top three predictors $f_{max}^{-3dB}$, $f_{min}^{-3dB}$, and $f_{min}^{-10dB}$. 
+
+!["Density clustering solution calculated using Euclidean distances between clicks with non-parametric features log-transformed. The bottom panel shows the three clusters represented in the first two dimensions of feature space, colored separately. The upper left panel shows the cluster center points that were captured when setting $\rho$ = 25 and $\delta$ = 2. The upper right panel shows $\gamma$, the product of $\rho$ and $\delta$. Each cluster contained clicks from all three species classes."](fig_img/clusters.png){#fig-clusters}
+
+```{r}
+#| label: tbl-clust-assn
+#| tbl-cap: "Table of cluster assignments. Each cell shows the proportion of clicks in each class that were assigned to the cluster."
+
+samp_clust <- readRDS("samp_clust.rds")
+samp_clust %>%
+  count(species, clust) %>%
+  mutate(tot = sum(n), .by=species) %>%
+  mutate(prop = round(n/tot, 2)) %>%
+  select(species, clust, prop) %>%
+  pivot_wider(names_from = clust, values_from = prop) %>%
+  rename("Cluster 1" = `1`,
+         "Cluster 2" = `2`,
+         "Cluster 3" = `3`,) %>%
+  mutate(species = case_match(species,
+                              "ks" ~ "*Kogia* spp.",
+                              "pd" ~ "Dall's porpoise",
+                              "pp"~ "harbor porpoise")) %>%
+  kable()
+```
+
+### Event classification
+
+After dividing click data into multiple putative call types, Mid-range clicks were the most prevalent click subtype for Dall’s (83% of clicks). High-range most prevalent for harbor porpoise (64%). Kogia had a more balanced split between mid-range and low-range, with 55% and 43% in each subtype, respectively. 1000 trees were used for each call classifier with sample size X, Y, Z due to the varying distribution across the three classes. The performance of each call classifier varied and was highest for A, lowest for B (going to say something about how this isn’t a concern—otherwise why include this information?). At the event level, the BANTER model was trained (ntree=1000, sampsize = 8). correctly classified 87.2% of all events (Table 4). Accuracy was lowest for harbor porpoise (83%) and highest for Dall’s porpoise (93%). Accuracy in all three classes was greater than what was expected due to chance (priors in Table 4). The top three of the ten most important event predictors (Fig) were the mean probability values of 1) mid-range clicks assigned to Dall’s porpoise 2) mid-range clicks assigned to harbor porpoise, 3) low-range clicks assigned to Kogia. 
+
+The proximity plot clustered events (Figure 4, points) into non-overlapping regions (Fig 4, shaded areas) inside of which virtually all of events were correctly classified, as indicated by the color of the ring around each point matching the color of its center point. For events not closely associated with the cluster core, of which there appeared to be few, model misclassification was more prevalent.
+
+###	Survey data collection and model predictions
+
+The PAM survey data employed for predictions yielded a total post-event definition of 102,464 detections distributed across 1,946 events. The number of events contributed by each drift ranged from 2 to 291. Figure X shows the predicted classifications represented by the bar graph showing variation in not only the number of events throughout the drifts in the survey but also in the frequency of predictions for each species. The proportion of events classified as each class ranged from drift to drift, with an IQR of 0.5-6%, 2-24%, 70-91,%  for Kogia, harbor porpoise, and Dall’s porpoise respectively. The overall proportion of events classified as each species across the entire survey was ~4%, 27%, 69% for Kogia, harbor porpoise, and Dall’s porpoise, respectively. If these were split on the basis of depth, it was found that in depths less than 200 m , Harbor porpoise was the most common prediction (Fig X).
+
+```{r}
+
+```
+
+
+Summary statistics for each class’s acoustic features are given in @tbl-class-stats. These summaries suggested differences among classes that were also visualized by comparing the average spectra and concatenated spectrograms given in @fig-avgspec. Altogether, these comparisons suggested that *Kogia*, Dall’s, and harbor porpoise emit click energy focused at respectively increasing frequencies. Peak frequency was one such feature to indicate this relationship, as *Kogia*, Dall's porpoise, and harbor porpoise produced mean (sd) values of `{r} mean_sd(stats$peak, "ks")`, `{r} mean_sd(stats$peak, "pd")`, `{r} mean_sd(stats$peak, "pp")`, respectively. The same relationship was apparent by comparing the features of center, maximum, and minimum frequencies at both -3 dB and -10 dB (@tbl-class-stats). As shown visually in @fig-avgspec, this shift is evident by comparing the frequency values associated with the peaks in the average spectra as well as the darkened bands in the concatenated spectrograms.
 
 These visualizations also reveal other characteristics, geometric characteristics that appeared to be unique among the three classes. As compared to Kogia which has mean (sd) bandwidth of `{r} mean_sd(stats$BW_3dB, "ks")` at -3 dB, Both Dall’s and harbor have lesser bandwidth at -3 dB which is `{r} mean_sd(stats$BW_3dB, "pd")` and `{r} mean_sd(stats$BW_3dB, "pp")`, respectively. Both harbor and Dall’s also exhibited apparent shoulders or notches in their spectra at lower frequencies than peak frequency, which was also distinguished them from the more smoothed and unimodal profile of the average spectrum of *Kogia*.
 

@@ -5,6 +5,7 @@ execute:
   warning: false
   error: false
   echo: false
+number-depth: 1
 
 ---
 
@@ -16,11 +17,13 @@ library(banter)
 library(rfPermute)
 library(knitr)
 library(densityClust)
+library(ggOceanMaps)
+library(ggspatial)
 
 source("manuscript.R")
 ```
 
-# Tables
+# Tables and Figures {.unnumbered}
 
 ## @tbl-ndets
 
@@ -80,7 +83,15 @@ train.ec %>%
 train.clust.table %>% kable()
 ```
 
-# Figures
+## @tbl-bant-conf-matr
+
+```{r}
+#| label: tbl-bant-conf-matr
+#| tbl-cap: "BANTER model confusion matrix showing classification accuracy for all classes."
+
+nbhf.bant <- readRDS("best_banter.rds")
+confusionMatrix(getBanterModel(nbhf.bant)) %>% kable()
+```
 
 ## @fig-data-loss
 
@@ -138,3 +149,44 @@ Averaged spectra and concatenated spectrograms for all species classes in the tr
 
 plotDensityClust(train.clust)
 ```
+
+## @fig-bant-proximity
+
+```{r}
+#| label: fig-bant-proximity
+#| fig-cap: "Proximity plot showing events as points and halos around events as model's classification result. The colors indicate the different classes."
+
+plotProximity(getBanterModel(nbhf.bant))
+```
+
+## @fig-bant-importance
+
+```{r}
+#| label: fig-bant-importance
+#| fig-cap: "Heat map showing importance rank of top ten most important predictors for the BANTER classifier."
+
+plotImportance(getBanterModel(nbhf.bant), plot.type="heatmap")
+```
+
+## @fig-drift-predictions
+
+```{r}
+#| label: fig-drift-predictions
+#| fig-cap: "Survey data set NBHF event predictions, colored by species."
+
+result <- predict(nbhf.bant, drift.bant)$predict.df
+
+spatial <- drift.ec %>%
+  group_by(eventId) %>%
+  summarize(lat=mean(Latitude, na.rm=TRUE),
+            lon=mean(Longitude, na.rm=TRUE),
+            db=str_extract(eventId, "\\w+_\\d+")) %>% 
+  inner_join(result, by=join_by("eventId"=="event.id"))
+
+spatial %>%
+  basemap(bathymetry = TRUE, bathy.style = "rbg") +
+  geom_spatial_point(data = spatial,
+                     mapping = aes(x = lon, y = lat, color=predicted))
+
+```
+
