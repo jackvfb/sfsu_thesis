@@ -67,6 +67,10 @@ samp_clust %>%
 
 # RF WITH CLUST VS SPECIES AS RESPONSE VAR------------------------------------------
 
+# Choose consistent sample size
+
+ss <- min(balancedSampsize(samp_clust$species), balancedSampsize(samp_clust$clust))
+
 # Cluster as response variable
 
 rf_data <- samp_clust %>%
@@ -74,11 +78,9 @@ rf_data <- samp_clust %>%
   mutate(clust = as.factor(clust)) %>%
   as.data.frame()
 
-ss <- balancedSampsize(rf_data$clust)
-
 rf <- randomForest(formula = clust ~ .,
                    data = rf_data,
-                   sampsize = ss,
+                   sampsize = rep(ss, 3),
                    proximity = TRUE,
                    importance = TRUE)
 
@@ -95,7 +97,7 @@ rf_data.sp <- samp_clust %>%
 
 rf.sp <- randomForest(formula = species ~ .,
                    data = rf_data.sp,
-                   sampsize = rep(35, 3), # don't change this from last model for better comparison
+                   sampsize = rep(ss, 3), # don't change this from last model for better comparison
                    proximity = TRUE,
                    importance = TRUE)
 

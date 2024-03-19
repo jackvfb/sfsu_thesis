@@ -87,7 +87,7 @@ Summary statistics for click features extracted by *PAMpal* are given in @tbl-su
 ```{r}
 #| label: tbl-sumstats
 #| tbl-cap: "Summary statistics of acoustic features for each species class, given as mean \u00b1 standard deviation. The abbreviated name for the feature is given underneath in parenthesis, where needed."
-#| warnings: false
+#| message: false
 
 train.ec %>%
   select(species, all_of(varsWanted)) %>%
@@ -120,21 +120,15 @@ train.ec %>%
   kable(align="c")
 ```
 
-Sorted by peak frequency, the concatenated spectrograms in @fig-concatspec exhibited lateral darkening in bands, showing that the region of highest energy was well defined in the majority of the clicks comprising each class in the training set. With clicks sorted by peak frequency, as shown, slight incline was introduced to the lateral band indicating that there were fluctuations in peaks. 
+The concatenated spectrograms in @fig-concatspec exhibited lateral darkening in bands, showing that the region of highest energy was well defined in the majority of the clicks comprising each class in the training set. With clicks sorted by peak frequency, as shown, a slight incline was introduced to the lateral band indicating that there were fluctuations in peaks. 
 
-The averaged spectra for each species displayed distinct geometry. *Kogia* spp. (@fig-concatspec, B) was descriptively more symmetrical and smoothed. Dall’s porpoise (@fig-concatspec, D) and harbor porpoise (@fig-concatspec, F) had notches and shoulders at frequencies below peak. The frequency values as which the peaks and notches occurred, as well as the bandwidth of the spectra at different levels of intensity, clearly differed between each class.
+The averaged spectra in @fig-concatspec displayed unique geometry. *Kogia* spp. (@fig-concatspec, B) was descriptively more symmetrical and smoothed. Dall’s porpoise (@fig-concatspec, D) and harbor porpoise (@fig-concatspec, F) had notches and shoulders at frequencies below peak. The frequency values as which the peaks and notches occurred, as well as the bandwidth of the spectra at different levels of intensity, clearly differed between each class.
 
 !["Concatenated spectrograms (Left side) and averaged spectra (Right side) for each of the three classes in the training set: *Kogia* spp. (A, B), Dall's porpoise (C, D), and harbor porpoise (E, F)."](fig_img/concatspec.png){#fig-concatspec}
 
-### Click classification
+### Clustering
 
-####	Supervised
-
-Using the complete set of features as predictors, a random forest trained with species as it’s response variable ($n_{tree} = 500, n_{sampsize} = 35$) had 88.4% accuracy. The three important predictors were $f_{max}^{-10dB}$, $f_{center}^{-10dB}$, and $f_{min}^{-10dB}$.
-
-#### Unsupervised
-
-Density clustering formed three clusters when setting $\rho$ = 25 and $\delta$ = 2 (@fig-clusters). The distribution of each class within each the three click clusters revealed that each class was distributed in varying proportions across each cluster (@tbl-clust-assn). Using these clusters as the response variable in a random forest click classifier ($n_{tree} = 500, n_{sampsize} = 35$) resulted in classification accuracy of 98.5% correct, with top three predictors $f_{max}^{-3dB}$, $f_{min}^{-3dB}$, and $f_{min}^{-10dB}$. 
+Density clustering formed three clusters when setting $\rho$ = 25 and $\delta$ = 2 (@fig-clusters). The number of clusters could be increased by lowering these values, but in these scenarios at least one cluster contained less than five clicks. The chosen solution therefore provided the greatest number of clusters such that each cluster was populated with a non-negligible number of clicks. Regardless of how many clusters were formed, it was clear that each species distributed across multiple clusters. The counts for each species are shown (normalized) in each cluster in in @tbl-clust-assn.
 
 !["Density clustering solution calculated using Euclidean distances between clicks with non-parametric features log-transformed. The bottom panel shows the three clusters represented in the first two dimensions of feature space, colored separately. The upper left panel shows the cluster center points that were captured when setting $\rho$ = 25 and $\delta$ = 2. The upper right panel shows $\gamma$, the product of $\rho$ and $\delta$. Each cluster contained clicks from all three species classes."](fig_img/clusters.png){#fig-clusters}
 
@@ -159,9 +153,44 @@ samp_clust %>%
   kable()
 ```
 
+### Click classification
+
+Next, random forests were trained to classify clicks. Two models were developed 1) with species as the response variable and 2) with cluster as the response variable. Sample size ($n_{samp}$) and number of trees ($n_{tree}$) were held constant for both models. $n_{samp}$ = 35 was half the size of the smallest class and $n_{tree}$ = 500 was left as the default. The species classifier resulted in 88.4% accuracy with the three most important predictors $f_{max}^{-10dB}$, $f_{center}^{-10dB}$, and $f_{min}^{-10dB}$. The cluster classifier resulted in 98.5% accuracy with the three most important predictors $f_{max}^{-3dB}$, $f_{min}^{-3dB}$, and $f_{min}^{-10dB}$. 
+
 ### Event classification
 
-After dividing click data into multiple putative call types, Mid-range clicks were the most prevalent click subtype for Dall’s (83% of clicks). High-range most prevalent for harbor porpoise (64%). Kogia had a more balanced split between mid-range and low-range, with 55% and 43% in each subtype, respectively. 1000 trees were used for each call classifier with sample size X, Y, Z due to the varying distribution across the three classes. The performance of each call classifier varied and was highest for A, lowest for B (going to say something about how this isn’t a concern—otherwise why include this information?). At the event level, the BANTER model was trained (ntree=1000, sampsize = 8). correctly classified 87.2% of all events (Table 4). Accuracy was lowest for harbor porpoise (83%) and highest for Dall’s porpoise (93%). Accuracy in all three classes was greater than what was expected due to chance (priors in Table 4). The top three of the ten most important event predictors (Fig) were the mean probability values of 1) mid-range clicks assigned to Dall’s porpoise 2) mid-range clicks assigned to harbor porpoise, 3) low-range clicks assigned to Kogia. 
+```{r}
+bant <- readRDS("models/bant.rds")
+```
+
+#### Dividing clicks
+
+After dividing clicks into three frequency bands (low, middle, and high range), each call type was represented in different proportions for each species, shown in  in each call type. 83% of clicks). High-range most prevalent for harbor porpoise (64%). Kogia had a more balanced split between mid-range and low-range, with 55% and 43% in each subtype, respectively.
+
+```{r}
+#| label: tbl-propcalls
+#| tbl-cap: Proportion of each call type in each species class. "Low" refers to proportion of clicks in each class such that $100 \leq f_{peak} < 120$, "middle" refers to proportion of clicks in each class $120 \leq f_{peak} < 140$, "high" refers to proportion of clicks in each class $140 \leq f_{peak} \leq 160$.
+#| warning: false
+
+propCalls(bant) %>%
+  mutate(across(where(is.numeric), round, digits = 2)) %>%
+  mutate(species = case_match(species,"ks" ~ "*Kogia* spp.",
+                              "pd" ~ "Dall's porpoise",
+                              "pp" ~ "harbor porpoise",
+                              .default = species)) %>%
+  rename("Low" = prop.lorange,
+         "Middle" = prop.midrange,
+         "High" = prop.hirange) %>% 
+  kable()
+```
+
+#### Call classifiers
+
+(1000 trees were used for each call classifier with sample size X, Y, Z due to the varying distribution across the three classes. The performance of each call classifier varied and was highest for A, lowest for B (going to say something about how this isn’t a concern—otherwise why include this information?).
+
+#### BANTER (event) classifier
+
+At the event level, the BANTER model was trained (ntree=1000, sampsize = 8). correctly classified 87.2% of all events (Table 4). Accuracy was lowest for harbor porpoise (83%) and highest for Dall’s porpoise (93%). Accuracy in all three classes was greater than what was expected due to chance (priors in Table 4). The top three of the ten most important event predictors (Fig) were the mean probability values of 1) mid-range clicks assigned to Dall’s porpoise 2) mid-range clicks assigned to harbor porpoise, 3) low-range clicks assigned to Kogia. 
 
 The proximity plot clustered events (Figure 4, points) into non-overlapping regions (Fig 4, shaded areas) inside of which virtually all of events were correctly classified, as indicated by the color of the ring around each point matching the color of its center point. For events not closely associated with the cluster core, of which there appeared to be few, model misclassification was more prevalent.
 
