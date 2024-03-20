@@ -38,11 +38,13 @@ drifts <- inner_join(locations, predictions, by=join_by("eventId"=="event.id")) 
 # Arranged in order of median Latitude, S -> N from left to right
 drifts %>%
   group_by(db) %>%
-  mutate(db_lat = round(median(Latitude), 2)) %>% 
+  mutate(db_lat = round(median(Latitude), 2)) %>%
   ggplot() +
   geom_bar(aes(x=fct_reorder(db, db_lat),
                fill=predicted)) +
-  theme(axis.text.x = element_text(angle=45))
+  theme(axis.text.x = element_text(angle=45))+
+  xlab("Drift name")+
+  ylab("$n$ events")
 
 
 # DRIFT STATS POST PREDICTION -----------------------------------------------------------
@@ -50,9 +52,9 @@ drifts %>%
 # Give the proportion of each class's predictions in each drift
 ex <- expand(drift.ec, db,
        predicted = c("pd", "pp", "ks"))
-  
 
-drift.stats.2 <- inner_join(predictions, drift.ec, by=join_by("event.id"=="eventId")) %>% 
+
+drift.stats.2 <- inner_join(predictions, drift.ec, by=join_by("event.id"=="eventId")) %>%
   group_by(db, predicted) %>%
   summarize(n_ev = length(unique(event.id))) %>%
   right_join(ex, by=c("db", "predicted")) %>%
@@ -69,6 +71,15 @@ drift.stats.2 %>%
          max=map_dbl(data, \(x) max(x$prop)),
          median=map_dbl(data, \(x) median(x$prop)))
 
+# same thing as box plot
+drift.stats.2 %>%
+  ggplot()+
+  geom_boxplot(aes(x=predicted, y=prop))+
+  scale_x_discrete(breaks = c("ks", "pd", "pp"),
+                   labels = c("K", "d", "p")) +
+  xlab("Predicted species")+
+  ylab("Proportion of events in drift")
+
 # total proportion across entire survey for each class
 nrow(predictions[predictions$predicted=="ks",])/nrow(predictions)
 nrow(predictions[predictions$predicted=="pd",])/nrow(predictions)
@@ -77,11 +88,11 @@ nrow(predictions[predictions$predicted=="pp",])/nrow(predictions)
 # MAKE MAPS ---------------------------------------------------------------
 
 myMap <- function(limits) {
-  
+
   bmap <- basemap(limits = limits,
                   bathymetry = TRUE,
                   bathy.style = "rbg")
-  
+
   bmap + geom_spatial_point(data = drifts,
                             aes(x = Longitude,
                                 y = Latitude,
@@ -99,7 +110,7 @@ myMap(c(-123, -121, 35, 36)) # mby
 # GET DEPTHS --------------------------------------------------------------
 
 env <- drifts %>%
-  select(Latitude, Longitude, UTC) %>% 
+  select(Latitude, Longitude, UTC) %>%
   matchEnvData(nc="erdSrtm30plusSeafloorGradient", var="sea_floor_depth")
 
 drifts_env <- drifts %>%

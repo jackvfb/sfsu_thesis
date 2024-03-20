@@ -14,9 +14,10 @@ library(banter)
 library(rfPermute)
 library(knitr)
 library(densityClust)
+library(ggtext)
 ```
 
-# Results {.unnumbered}
+## Results {.unnumbered}
 
 ### Click detection and event definition
 
@@ -122,7 +123,7 @@ train.ec %>%
 
 The concatenated spectrograms in @fig-concatspec exhibited lateral darkening in bands, showing that the region of highest energy was well defined in the majority of the clicks comprising each class in the training set. With clicks sorted by peak frequency, as shown, a slight incline was introduced to the lateral band indicating that there were fluctuations in peaks. 
 
-The averaged spectra in @fig-concatspec displayed unique geometry. *Kogia* spp. (@fig-concatspec, B) was descriptively more symmetrical and smoothed. Dall’s porpoise (@fig-concatspec, D) and harbor porpoise (@fig-concatspec, F) had notches and shoulders at frequencies below peak. The frequency values as which the peaks and notches occurred, as well as the bandwidth of the spectra at different levels of intensity, clearly differed between each class.
+The averaged spectra in @fig-concatspec displayed unique geometry. *Kogia* spp. (@fig-concatspec, B) was descriptively more symmetrical and smoothed. Dall’s porpoise (@fig-concatspec, D) and harbor porpoise (@fig-concatspec, F) had notches and shoulders at frequencies below peak. The frequency values at which the peaks and notches occurred, as well as the bandwidth of the spectra at different levels of intensity, clearly differed between each class.
 
 !["Concatenated spectrograms (Left side) and averaged spectra (Right side) for each of the three classes in the training set: *Kogia* spp. (A, B), Dall's porpoise (C, D), and harbor porpoise (E, F)."](fig_img/concatspec.png){#fig-concatspec}
 
@@ -155,7 +156,7 @@ samp_clust %>%
 
 ### Click classification
 
-Next, random forests were trained to classify clicks. Two models were developed 1) with species as the response variable and 2) with cluster as the response variable. Sample size ($n_{samp}$) and number of trees ($n_{tree}$) were held constant for both models. $n_{samp}$ = 35 was half the size of the smallest class and $n_{tree}$ = 500 was left as the default. The species classifier resulted in 88.4% accuracy with the three most important predictors $f_{max}^{-10dB}$, $f_{center}^{-10dB}$, and $f_{min}^{-10dB}$. The cluster classifier resulted in 98.5% accuracy with the three most important predictors $f_{max}^{-3dB}$, $f_{min}^{-3dB}$, and $f_{min}^{-10dB}$. 
+Next, random forests were trained to classify clicks. Two models were developed 1) with species as the response variable and 2) with cluster as the response variable. The species classifier resulted in 88.4% accuracy with the three most important predictors $f_{max}^{-10dB}$, $f_{center}^{-10dB}$, and $f_{min}^{-10dB}$. The cluster classifier resulted in 98.5% accuracy with the three most important predictors $f_{max}^{-3dB}$, $f_{min}^{-3dB}$, and $f_{min}^{-10dB}$. 
 
 ### Event classification
 
@@ -163,61 +164,80 @@ Next, random forests were trained to classify clicks. Two models were developed 
 bant <- readRDS("models/bant.rds")
 ```
 
-#### Dividing clicks
+The call classifiers composing the first stage of the BANTER model showed that overall performance was highest for middle clicks (86%), and about equal for low and high clicks (68%) (@tbl-mdlcorr). None exceeded 88% which was the accuracy of the call classifier trained on the undivided click set.
 
-After dividing clicks into three frequency bands (low, middle, and high range), each call type was represented in different proportions for each species, shown in  in each call type. 83% of clicks). High-range most prevalent for harbor porpoise (64%). Kogia had a more balanced split between mid-range and low-range, with 55% and 43% in each subtype, respectively.
+At the event level, the BANTER model correctly classified 88% of all events (@tbl-mdlcorr). Accuracy was lowest for harbor porpoise (85%) and highest for both Dall’s porpoise (93%) and *Kogia* spp. (93%). Accuracy in all three classes was greater than what was expected due to chance. The top three of the ten most important event predictors were the mean probability values of 1) middle clicks assigned to Dall’s porpoise 2) middle clicks assigned to harbor porpoise, 3) low clicks assigned to *Kogia* spp. (@fig-bantimp).
+
+The proximity plot clustered events (@fig-bantprox, points) into non-overlapping regions (@fig-bantprox, shaded areas) inside of which virtually all of events were correctly classified, as indicated by the color of the ring around each point matching the color of its center point. For events not closely associated with the cluster core, of which there appeared to be few, model misclassification was more prevalent.
 
 ```{r}
-#| label: tbl-propcalls
-#| tbl-cap: Proportion of each call type in each species class. "Low" refers to proportion of clicks in each class such that $100 \leq f_{peak} < 120$, "middle" refers to proportion of clicks in each class $120 \leq f_{peak} < 140$, "high" refers to proportion of clicks in each class $140 \leq f_{peak} \leq 160$.
+#| label: tbl-mdlcorr
+#| tbl-cap: Species and overall accuracies of event classifier and the three call classifiers composing it. "Low click" classifier was trained on clicks where $100 \leq f_{peak} < 120$, "middle click" where $120 \leq f_{peak} < 140$, and "high click" where $140 \leq f_{peak} \leq 160$.
 #| warning: false
 
-propCalls(bant) %>%
-  mutate(across(where(is.numeric), round, digits = 2)) %>%
+modelPctCorrect(bant) %>%
   mutate(species = case_match(species,"ks" ~ "*Kogia* spp.",
                               "pd" ~ "Dall's porpoise",
                               "pp" ~ "harbor porpoise",
                               .default = species)) %>%
-  rename("Low" = prop.lorange,
-         "Middle" = prop.midrange,
-         "High" = prop.hirange) %>% 
+  rename("low click" = lorange,
+         "middle click" = midrange,
+         "high click" = hirange) %>% 
   kable()
 ```
 
-#### Call classifiers
-
-(1000 trees were used for each call classifier with sample size X, Y, Z due to the varying distribution across the three classes. The performance of each call classifier varied and was highest for A, lowest for B (going to say something about how this isn’t a concern—otherwise why include this information?).
-
-#### BANTER (event) classifier
-
-At the event level, the BANTER model was trained (ntree=1000, sampsize = 8). correctly classified 87.2% of all events (Table 4). Accuracy was lowest for harbor porpoise (83%) and highest for Dall’s porpoise (93%). Accuracy in all three classes was greater than what was expected due to chance (priors in Table 4). The top three of the ten most important event predictors (Fig) were the mean probability values of 1) mid-range clicks assigned to Dall’s porpoise 2) mid-range clicks assigned to harbor porpoise, 3) low-range clicks assigned to Kogia. 
-
-The proximity plot clustered events (Figure 4, points) into non-overlapping regions (Fig 4, shaded areas) inside of which virtually all of events were correctly classified, as indicated by the color of the ring around each point matching the color of its center point. For events not closely associated with the cluster core, of which there appeared to be few, model misclassification was more prevalent.
-
-###	Survey data collection and model predictions
-
-The PAM survey data employed for predictions yielded a total post-event definition of 102,464 detections distributed across 1,946 events. The number of events contributed by each drift ranged from 2 to 291. Figure X shows the predicted classifications represented by the bar graph showing variation in not only the number of events throughout the drifts in the survey but also in the frequency of predictions for each species. The proportion of events classified as each class ranged from drift to drift, with an IQR of 0.5-6%, 2-24%, 70-91,%  for Kogia, harbor porpoise, and Dall’s porpoise respectively. The overall proportion of events classified as each species across the entire survey was ~4%, 27%, 69% for Kogia, harbor porpoise, and Dall’s porpoise, respectively. If these were split on the basis of depth, it was found that in depths less than 200 m , Harbor porpoise was the most common prediction (Fig X).
-
 ```{r}
+#| label: fig-bantimp
+#| fig-cap: Heat map showing the ten most important predictors for the random forest that classifies events. The name of the predictor is on the left, and the color of the cell indicates the rank.
+
+plotImportance(getBanterModel(bant), plot.type="heatmap")
 
 ```
 
+```{r}
+#| label: fig-bantprox
+#| fig-cap: Proximity plot showing the events in feature space, represented by points, with the circle around each point representing the model's resultant classification. The shaded regions represent the cluster associated with each class.
 
-Summary statistics for each class’s acoustic features are given in @tbl-class-stats. These summaries suggested differences among classes that were also visualized by comparing the average spectra and concatenated spectrograms given in @fig-avgspec. Altogether, these comparisons suggested that *Kogia*, Dall’s, and harbor porpoise emit click energy focused at respectively increasing frequencies. Peak frequency was one such feature to indicate this relationship, as *Kogia*, Dall's porpoise, and harbor porpoise produced mean (sd) values of `{r} mean_sd(stats$peak, "ks")`, `{r} mean_sd(stats$peak, "pd")`, `{r} mean_sd(stats$peak, "pp")`, respectively. The same relationship was apparent by comparing the features of center, maximum, and minimum frequencies at both -3 dB and -10 dB (@tbl-class-stats). As shown visually in @fig-avgspec, this shift is evident by comparing the frequency values associated with the peaks in the average spectra as well as the darkened bands in the concatenated spectrograms.
+plotProximity(getBanterModel(bant))
+```
 
-These visualizations also reveal other characteristics, geometric characteristics that appeared to be unique among the three classes. As compared to Kogia which has mean (sd) bandwidth of `{r} mean_sd(stats$BW_3dB, "ks")` at -3 dB, Both Dall’s and harbor have lesser bandwidth at -3 dB which is `{r} mean_sd(stats$BW_3dB, "pd")` and `{r} mean_sd(stats$BW_3dB, "pp")`, respectively. Both harbor and Dall’s also exhibited apparent shoulders or notches in their spectra at lower frequencies than peak frequency, which was also distinguished them from the more smoothed and unimodal profile of the average spectrum of *Kogia*.
+###	Survey data collection and model predictions
 
-## Clustering
+The PAM survey data employed for predictions yielded a total post-event definition of 102,464 detections distributed across 1,946 events. The overall proportion of events classified as each species across the entire survey was ~4%, 27%, 69% for *Kogia* spp., harbor porpoise, and Dall’s porpoise, respectively. @fig-driftpred shows that the number of events as well as the frequency of predictions for each species varied among drifts. The total events in each drift ranged from 2 - 291 and the proportion of predictions for each species, given as the IQR, was 0.5-6%, 2-24%, 70-91,%  for *Kogia* spp., harbor porpoise, and Dall’s porpoise respectively. When split by depth, it was found that events that occurred in waters less than 200 m deep had a greater proportion of harbor porpoise predictions relative to all other events.
 
-Using all available features to calculate the Euclidean distances between clicks, unsupervised clustering revealed the formation of three clusters (@fig-density-clust), each of which was dominated by clicks from a distinct species class, as shown (@tbl-clust-assn). The three-cluster solution was favored because it captured cluster centers with high values of $\rho$ and $\delta$ and their product, $\gamma$ (@fig-density-clust, upper two panels).
+```{r}
+#| label: fig-driftpred
+#| fig-cap: "Predicted classifications, by drift, arranged in order of increasing latitude from left to right. The height of each bar represents the total number of events defined in each drift. The bars are colored based on the proportion of events classified as each species."
 
-## Modelling
+drifts <- readRDS("drifts.rds")
+drifts %>%
+  group_by(db) %>%
+  mutate(db_lat = round(median(Latitude), 2)) %>%
+  ggplot() +
+  geom_bar(aes(x=fct_reorder(db, db_lat),
+               fill=predicted)) +
+  theme(axis.text.x = element_text(angle=45))+
+  xlab("Drift name")+
+  ylab("Number of events")+
+  scale_fill_discrete(breaks = c("ks", "pd", "pp"),
+                       labels = c("*Kogia* spp.", "Dall's porpoise", "harbor porpoise"))+
+  theme(legend.text = element_markdown())
+```
 
-The BANTER model correctly classified 91% of all events (Table). As shown in the 
-Table, harbor had the lowest classification accuracy, 87%, next Kogia 93%, and best dall’s with 100% correct. Classification accuracy in all three classes was greater than what was expected due to chance (Given as priors in Table column R). Events in each class were discriminated using a consistent set predictors as demonstrated by non-overlapping regions occupied by each cluster in the proximity plot in Fig a (see for more information). Each cluster’s core is formed by a relatively compressed grouping of events within each class, with only one outlying harbor porpoise event that falls within dall’s porpoise. The model reliably classified these core events correctly, as indicated by the color of the circular halo around each point matching its center point. For events not closely associated with the core grouping, of which there were few, model misclassification was prevalent.
+## Discussion {.unnumbered}
 
-The top ten predictors were given, ranked by their overall importance, in the heatmap in Figure b. The top three showed consistency across all classes which reflecting the separation among clusters in the proximity plot. The top three predictors are the proportion of midrange clicks classified as dall’s, the proportion of midrange clicks classified as harbor porpoise, and the proportion of low range clicks classified as *Kogia*.
+By taking a supervised approach, using ground-truth data to train a classifier, our approach generated from raw acoustic recordings a set of temporally and spatially defined events, with associated species classifications with high confidence in their classification derived by taking into consideration not only the degree to which the clicks in the event resemble each species, but also the distribution of those differences within an individual grouping of clicks, an event. Through considering both the click and the event layer, as well as taking a supervised classification approach, this research revealed new uncertainties while addressing others, the principal source of uncertainty and ambiguity that was left unresolved after earlier attempts to classify NBHF signals in CCS.
 
-## Predictions
+At the click level, comparisons between species in the mean click features, concatenated spectrograms and average spectra suggests that on average, each species emits clicks with energy focused at different mean frequencies. Mean values did map onto previously reported by Griffiths. Though Kogia at the lowest frequency, harbor porpoise at the highest, Dall’s intermediate was an ordination that played out in various respects. Visually, it was evident from comparing the spectral profiles, observing shifts in their peaks and elevated energy regions, as well as in the concatenated spectrogram. It was also evident from the most important predictors that emerged from random forest classifiers, which identified center and peak frequencies as maintaining high importance across all classes. Also evident from a simple click classifier which classified overall 89% of clicks correctly, in which the most important predictors were X, Y, Z. How did these features compare to other studies?
 
-Predictions for the survey data revealed
+However it is important to understand that the picture that emerged from the average across the entirety of our data set was not necessarily indicative of the relationship that existed between individual click samples in all cases and still evidenced high degree of overlap. This was illustrated in part because of the large spread around the central measures in our feature space for each class, also demonstrated by deficiency in the classifier. Explanations for this confounding influences are A, B, C.
+
+In fact unsupervised clustering distributed clicks across three clusters (or more) clusters whose acoustic features could be used to predict cluster association with higher accuracy than the true species identify, showing that associations between clicks in feature space was not just related to species identity but likely to other factors as well such as A,B,C. , clarifying the existence of acoustic overlap. With our cluster classifier operating better than our species classifier, and on par with Griffiths et all classifier trained from unsupervised classes, we were able to show with groud-truth data interpretations based strictly on unsupervised clustering, should be interpreted cautiously as being representative individual species.
+
+One possibility for how to improve this would be to determine whether there are patterns that emerge when considering events rather than individual clicks as the unit of classification, which was the main driver of our study novelty and contribution. This was the original intent of employing BANTER. This has been shown to improve classification accuracy in delphinids essentially because there are characteristic distributions of classification and misclassification that are in fact unique to each species class and was thought to be a viable improvement in NBHF. Our investigation of this revealed that NBHF events could be classified at the event level with 88.7% accuracy by taking into consideration the mean patterns of distribution across all the call types, a result that does not appear to be better than the result we get from classifying strictly based on clicks. Suggesting that event classification, while on par with click classification, may not actually reduce uncertainty associated with acoustic overlap.
+
+Despite the equivalent accuracy, however, defining events instead of clicks presents an opportunity to introduce more sophistication into the classification process, and potentially more room to improve beyond click classification. We introducing a match score template matching process and scripting to define events based on other parameters, however there are conceivably many other ways of doing this, for example A, B, C. And we acknowledge that our method for defining events, which is vital to the overall results of our classification, could conceivably be improved. Indeed, there are concerns surrounding the way in which we defined events which could be limiting the accuracy that we are achieving with our BANTER model. The relatively large proportions of the data dropped from each database in the training set, which despite the known presence of animals during the recordings, was as high as 70-99%. This suggests low recall, i.e. fewer events being defined that what was expected. Low recall is a presumably a problem not only because it would act to falsely diminish acoustic density/presence in survey data (and consequently, the downstream products such as population stock estimates but also because it restricts the range of conditions and variation on which the classifier was trained. Working to further refine event definition, such as through expanding the number of templates, through obtaining ground-truth recordings with a greater range of observed features (e.g. range to animal, number of animals, orientation of animal), considering dBPP should continue to be explored with the potential of improving event definition and resultant classification accuracy.
+
+Despite the potential flaws in event definition, and the limits it may have imposed on our classification accuracy, the survey data set revealed a rich data set with an abundance of events across the survey area which broadly painted the picture that all species are present in our region but possible in different spatial patterns and overall proportions. While no steps were taken to effectively model these distributions, overall summary statistics revealed that some species are more prevalent than others and that, as expected, harbor porpoise more common in shallow depths.
+
+In conclusion, our process for defining events, designed to be a quick and expedient for identity good matches from among a large body of detections, was sufficient to reveal very important dimensions of the relationship between these different species, as well as to identify a rich set of events from the survey data.  Revealing that despite mean characteristics that tend to differ between NBHF species, there exists substantial overlap that would obscure the classification accuracy of a click classifier alone. Layering event classification over click classification with ML resolves this ambiguity to improve classification in a functional manner across data sets of large magnitude.

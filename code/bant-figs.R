@@ -7,7 +7,7 @@ library(PAMpal)
 
 bant1 <- export_banter(bindStudies(train), dropVars = c("dBPP", "Click_Detector_101_ici", "noiseLevel"))
 # bant <- split_calls(bant)
-bant1 <- NBHFbanter(bant1, 1000, 0.5, 1000, 0.5)
+bant1 <- NBHFbanter(bant1, 1000, 0.5, 10000, 0.5)
 
 bant1det <- getBanterModel(bant1, model="Click_Detector_101")
 plotImportance(bant1det, plot.type="heatmap")
@@ -21,7 +21,8 @@ modelPctCorrect(bant1)
 
 bant <- export_banter(bindStudies(train), dropVars = c("dBPP", "Click_Detector_101_ici", "noiseLevel"))
 bant <- split_calls(bant)
-bant <- NBHFbanter(bant, 1000, 0.5, 1000, 0.5)
+bant <- NBHFbanter(bant, 1000, 0.5, 10000, 0.5)
+saveRDS(bant, "models/bant.rds")
 
 modelPctCorrect(bant)
 propCalls(bant)
